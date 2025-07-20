@@ -1,31 +1,66 @@
-name: Build MobileMoney APK
+# This is a basic build.yaml for a Kivy application.
+# It's primarily used for CI/CD pipelines or more complex build scenarios.
+# For simple local builds, buildozer.spec is usually sufficient.
 
-on:
-  push:
-    branches:
-      - main
+# Application details
+app_name: MobileMoneyApp
+app_version: 1.0.0
+main_file: main.py # Assuming your main Kivy app file is named main.py
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Cloner le dépôt
-        uses: actions/checkout@v3
+# Kivy-specific settings
+kivy:
+  version: "2.3.0" # Or the version you are using, e.g., "2.2.1"
+  # You might need to specify a more precise Kivy version if you encounter issues.
 
-      - name: Installer les dépendances
-        run: |
-          sudo apt update
-          sudo apt install -y python3-pip unzip git zip openjdk-17-jdk
-          pip install buildozer cython
+# Python for Android (p4a) settings
+p4a:
+  # Python version to use for the Android build
+  python_version: "3.9" # Or your preferred Python 3 version (e.g., "3.8", "3.10")
 
-      - name: Construire l'APK avec buildozer
-        run: buildozer android debug
+  # Additional requirements for p4a
+  requirements:
+    - python3
+    - kivy
+    - sqlite3
+    - hashlib
+    - datetime
+    - pandas
+    - matplotlib
+    - numpy
+    - plyer
 
-      - name: Trouver l'APK généré
-        run: find . -name "*.apk"
+  # Android API levels
+  android_api: 33
+  android_minapi: 21
+  android_ndk: 25b
 
-      - name: Télécharger l’APK généré
-        uses: actions/upload-artifact@v4
-        with:
-          name: mobilemoney-apk
-          path: ./.buildozer/android/platform/build/dists/mobilemoney/bin/*.apk
+  # Permissions required by your app
+  permissions:
+    - INTERNET
+    - WRITE_EXTERNAL_STORAGE
+    - READ_EXTERNAL_STORAGE
+
+  # Other p4a options
+  # debug: true # Uncomment for debug builds
+  # enable_multidex: true # Uncomment if you have many dependencies
+
+# Buildozer settings (can also be managed directly in buildozer.spec)
+buildozer:
+  # Path to your buildozer.spec file
+  spec_file: buildozer.spec
+
+# Output settings
+output:
+  # Directory where the APK will be generated
+  directory: bin
+  # Name of the generated APK file
+  filename: mobilemoneyapp-1.0.0-armeabi-v7a-debug.apk # Adjust based on debug/release and architecture
+
+# Hooks (optional: for custom build steps)
+hooks:
+  # pre_build:
+  #   - echo "Running pre-build script..."
+  #   - python pre_build.py
+  # post_build:
+  #   - echo "Running post-build script..."
+  #   - python post_build.py
