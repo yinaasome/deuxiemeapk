@@ -8,7 +8,8 @@ package.name = mobilemoneyapp
 
 # (str) Package domain (needed for android/ios packaging)
 package.domain = org.test
-
+# (str)
+source.dir = .
 # (str) Application versioning (method 1)
 version = 1.0.0
 
