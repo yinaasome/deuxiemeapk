@@ -21,12 +21,12 @@ jobs:
       - name: Initialiser buildozer
         run: |
           buildozer android debug
-          
+
       - name: Afficher l'APK généré
         run: ls -l bin/
 
-      - name: Télécharger l’APK
-        uses: actions/upload-artifact@v3
+      - name: Télécharger l’APK généré
+        uses: actions/upload-artifact@v4
         with:
           name: mobilemoney-apk
           path: bin/*.apk
