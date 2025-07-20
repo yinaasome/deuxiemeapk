@@ -34,7 +34,7 @@ from kivy.properties import ListProperty, StringProperty
 from kivy.core.image import Image as CoreImage
 from kivy.uix.image import Image
 from kivy.clock import Clock
-from kivy.utils import platform
+from kivy.utils import platform 
 from plyer import storagepath
 # Configuration Matplotlib
 plt.switch_backend('agg')
@@ -1551,6 +1551,19 @@ class GlobalExportScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.setup_ui()
+    
+    def setup_ui(self):
+        with self.canvas.before:
+            Color(*COLORS['BACKGROUND'])
+            self.rect = Rectangle(size=Window.size, pos=self.pos)
+        
+        self.bind(pos=self.update_rect, size=self.update_rect)
+        
+        layout = BoxLayout
+        class GlobalExportScreen(Screen):
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+                self.setup_ui()
     
     def setup_ui(self):
         with self.canvas.before:
