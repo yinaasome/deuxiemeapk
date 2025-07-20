@@ -21,32 +21,53 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .buildozer_global
-        key: buildozer-global-${{ hashFiles('buildozer.spec') }}
+        key: buildozer-global-${{ hashFiles('buildozer.spec') }}-${{ steps.get-date.outputs.date }}
     
     - name: Cache Buildozer directory
       uses: actions/cache@v4
       with:
         path: .buildozer
-        key: ${{ runner.os }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('buildozer.spec') }}
+        key: ${{ runner.os }}-buildozer-${{ steps.get-date.outputs.date }}-${{ hashFiles('buildozer.spec') }}
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.9'
+        python-version: '3.11'
     
-    - name: Install dependencies
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          git zip unzip openjdk-17-jdk python3-pip \
+          autoconf libtool pkg-config zlib1g-dev \
+          libncurses5-dev libncursesw5-dev libtinfo5 \
+          cmake libffi-dev libssl-dev libltdl-dev \
+          build-essential ccache m4 libc6-dev \
+          libgmp-dev libmpfr-dev libmpc-dev \
+          libssl-dev libffi-dev
+    
+    - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install buildozer cython==0.29.33
-        sudo apt-get update
-        sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev libltdl-dev
+        pip install buildozer==1.5.0 cython==3.0.6
         
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       with:
-        api-level: 33
-        build-tools: 33.0.0
+        api-level: 34
+        build-tools: 34.0.0
         ndk-version: 25.2.9519653
+        
+    - name: Install additional Android SDK components
+      run: |
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "build-tools;34.0.0"
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-34"
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platform-tools"
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "tools"
+        
+    - name: Accept Android licenses
+      run: |
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
         
     - name: Build with Buildozer
       run: |
@@ -54,19 +75,34 @@ jobs:
         export ANDROID_SDK_ROOT=$ANDROID_HOME
         export ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/25.2.9519653
         export NDK_PATH=$ANDROID_NDK_ROOT
-        export PATH=$PATH:$ANDROID_SDK_ROOT/tools:$ANDROID_SDK_ROOT/platform-tools
+        export PATH=$PATH:$ANDROID_SDK_ROOT/tools:$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/build-tools/34.0.0
         
-        # Accept Android licenses
-        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+        # Verify AIDL is available
+        echo "Checking for AIDL..."
+        find $ANDROID_HOME -name "aidl" -type f 2>/dev/null || echo "AIDL not found in expected locations"
         
-        # Build APK
-        buildozer android debug
+        # List build-tools contents
+        ls -la $ANDROID_HOME/build-tools/34.0.0/ || echo "Build tools directory not found"
+        
+        # Initialize buildozer
+        buildozer android clean
+        
+        # Build APK with verbose output
+        buildozer -v android debug
+        
+    - name: List built files
+      run: |
+        find . -name "*.apk" -type f
+        ls -la bin/ || echo "No bin directory found"
         
     - name: Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
-        name: orange-money-apk
-        path: bin/*.apk
+        name: mobile-money-apk
+        path: |
+          bin/*.apk
+          .buildozer/android/platform/build-*/dists/*/bin/*.apk
+        if-no-files-found: warn
         
     - name: Create Release
       if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
@@ -76,22 +112,30 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: v${{ github.run_number }}
-        release_name: Orange Money v${{ github.run_number }}
+        release_name: Mobile Money v${{ github.run_number }}
         body: |
-          Nouvelle version de l'application Orange Money
+          New version of Mobile Money App
           
-          Changements:
-          - Application de gestion des opérations Orange Money
-          - Interface utilisateur en français
-          - Base de données SQLite intégrée
-          - Statistiques des opérations
+          Features:
+          - Mobile money transaction management
+          - SQLite database integration
+          - Transaction statistics and reports
+          - User-friendly interface
           
-          Pour installer l'APK:
-          1. Téléchargez le fichier APK
-          2. Activez les "Sources inconnues" dans les paramètres Android
-          3. Installez l'APK
+          Installation:
+          1. Download the APK file
+          2. Enable "Unknown sources" in Android settings
+          3. Install the APK
         draft: false
         prerelease: false
+        
+    - name: Find APK file
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      id: find_apk
+      run: |
+        APK_PATH=$(find . -name "*.apk" -type f | head -1)
+        echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+        echo "Found APK: $APK_PATH"
         
     - name: Upload Release APK
       if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
@@ -100,8 +144,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: bin/orangemoney-1.0-armeabi-v7a-debug.apk
-        asset_name: orange-money-v${{ github.run_number }}.apk
+        asset_path: ${{ steps.find_apk.outputs.apk_path }}
+        asset_name: mobile-money-v${{ github.run_number }}.apk
         asset_content_type: application/vnd.android.package-archive
-
-        retention-days: 5
