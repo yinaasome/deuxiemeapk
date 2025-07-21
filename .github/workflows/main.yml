@@ -11,7 +11,7 @@ env:
   PYTHON_VERSION: '3.9'
   ANDROID_API_LEVEL: '33'
   ANDROID_BUILD_TOOLS: '33.0.0'
-  ANDROID_NDK_VERSION: '25.2.9519653'  # Updated NDK version
+  ANDROID_NDK_VERSION: '25.2.9519653'
   BUILDOZER_SPEC_FILE: 'buildozer.spec'
 
 jobs:
@@ -34,7 +34,8 @@ jobs:
           python3-pip autoconf libtool \
           pkg-config zlib1g-dev libncurses5-dev \
           libncursesw5-dev libtinfo6 cmake \
-          libffi-dev libssl-dev libltdl-dev
+          libffi-dev libssl-dev libltdl-dev \
+          libxml2-dev libxslt-dev
         
     - name: Install Python dependencies
       run: |
@@ -47,6 +48,7 @@ jobs:
         api-level: ${{ env.ANDROID_API_LEVEL }}
         build-tools: ${{ env.ANDROID_BUILD_TOOLS }}
         ndk-version: ${{ env.ANDROID_NDK_VERSION }}
+        cmake-version: '3.22.1'
         
     - name: Configure environment
       run: |
@@ -61,27 +63,54 @@ jobs:
     - name: Configure Buildozer
       run: |
         mkdir -p ~/.buildozer
-        echo "[buildozer]" > ~/.buildozer/buildozer.spec
-        echo "log_level = 2" >> ~/.buildozer/buildozer.spec
-        echo "android.accept_sdk_license = True" >> ~/.buildozer/buildozer.spec
+        cat > ~/.buildozer/buildozer.spec <<EOL
+        [buildozer]
+        log_level = 2
+        android.accept_sdk_license = True
+        android.sdk_path = $ANDROID_HOME
+        android.ndk_path = $ANDROID_NDK_HOME
+        android.ant_path = /usr/share/ant
+        android.maven_repo = https://maven.google.com
+        android.maven_repo_backup = https://dl.google.com/dl/android/maven2
+        android.api = ${{ env.ANDROID_API_LEVEL }}
+        android.minapi = 21
+        android.ndk_version = ${{ env.ANDROID_NDK_VERSION }}
+        android.build_tools_version = ${{ env.ANDROID_BUILD_TOOLS }}
+        EOL
+        
+    - name: Pre-download dependencies
+      run: |
+        # Pre-download common problematic packages
+        wget https://python-for-android.googlecode.com/files/python3-3.9.1-armeabi-v7a.zip -O ~/.buildozer/android/packages/python3-3.9.1-armeabi-v7a.zip
+        wget https://github.com/kivy/python-for-android/raw/develop/pythonforandroid/recipes/kivy/__init__.py -O ~/.buildozer/android/packages/kivy-2.3.0.zip
         
     - name: Build with Buildozer
       run: |
+        # Clean previous builds
+        rm -rf .buildozer/android/platform/build-*
+        
+        # Build with verbose output
         buildozer -v android debug 2>&1 | tee build.log
-        grep -i "error\|fail" build.log && exit 1
-        exit 0
+        
+        # Check for errors
+        if grep -q "Download failed" build.log; then
+          echo "::error::Download failed during build process"
+          cat build.log
+          exit 1
+        fi
         
     - name: Verify APK
       run: |
         APK_FILE=$(ls bin/*.apk 2>/dev/null | head -n 1)
         
         if [ -z "$APK_FILE" ]; then
-          echo "::error::Aucun fichier APK généré!"
+          echo "::error::No APK file was generated!"
+          echo "Build log contents:"
           cat build.log
           exit 1
         fi
         
-        echo "APK généré: $APK_FILE"
+        echo "Generated APK: $APK_FILE"
         echo "APK_PATH=$APK_FILE" >> $GITHUB_ENV
         
     - name: Upload APK artifact
