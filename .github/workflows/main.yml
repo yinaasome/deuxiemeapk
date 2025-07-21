@@ -1,201 +1,66 @@
-- name: Accept licenses and install componentsname:Build Mobile Application
+name: Build Mobile Money APK
+
 on:
   push:
-    branches: [main, master]
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
-    timeout-minutes: 60
+    runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-      
-    - name: Setup Python 3.8
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.9
       uses: actions/setup-python@v4
       with:
-        python-version: '3.8'
-        
-    - name: Setup Java 8
-      uses: actions/setup-java@v3
-      with:
-        distribution: 'temurin'
-        java-version: '8'
-        
+        python-version: '3.9'
+    
     - name: Install system dependencies
       run: |
-        sudo apt-get update -qq
+        sudo apt-get update
         sudo apt-get install -y \
-          git zip unzip openjdk-8-jdk \
-          python3-pip autoconf libtool pkg-config \
-          zlib1g-dev libncurses5-dev libncursesw5-dev \
-          libtinfo5 cmake libffi-dev libssl-dev \
-          build-essential ccache ant
-          
+          git zip unzip openjdk-17-jdk \
+          python3-pip autoconf libtool \
+          pkg-config zlib1g-dev libncurses5-dev \
+          libncursesw5-dev libtinfo6 cmake \
+          libffi-dev libssl-dev libltdl-dev \
+          libxml2-dev libxslt-dev
+    
     - name: Install Python dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install buildozer==1.4.0 cython==0.29.28
-        
-    - name: Create minimal Kivy app
+        python -m pip install --upgrade pip wheel
+        pip install buildozer cython==0.29.33 kivy==2.3.0
+    
+    - name: Setup Android SDK
       run: |
-        cat > main.py << 'EOF'
-        from kivy.app import App
-        from kivy.uix.label import Label
-
-        class MainApp(App):
-            def build(self):
-                return Label(text='Hello Mobile World!')
-
-        MainApp().run()
-        EOF
+        mkdir -p ~/.android
+        touch ~/.android/repositories.cfg
         
-    - name: Create minimal buildozer.spec
+        # Install Android SDK components
+        yes | sdkmanager --licenses
+        sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0" "ndk;25.2.9519653"
+        
+        echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
+        echo "PATH=$PATH:$ANDROID_HOME/platform-tools" >> $GITHUB_ENV
+    
+    - name: Build with Buildozer
       run: |
-        cat > buildozer.spec << 'EOF'
-        [app]
-        title = Mobile App
-        package.name = mobileapp
-        package.domain = org.test
-        source.dir = .
-        source.include_exts = py
-        version = 0.1
-        requirements = python3,kivy
+        buildozer -v android debug 2>&1 | tee build.log
         
-        [buildozer]
-        log_level = 2
-        
-        # Android specific
-        android.api = 30
-        android.minapi = 21
-        android.ndk = 23b
-        android.sdk = 30
-        android.arch = armeabi-v7a
-        android.accept_sdk_license = True
-        android.gradle_repositories = google(), mavenCentral()
-        EOF
-        
-    - name: Setup Android environment
-      run: |
-        # Use system Android SDK if available
-        export ANDROID_SDK_ROOT=$HOME/android-sdk
-        export ANDROID_HOME=$HOME/android-sdk
-        mkdir -p $ANDROID_SDK_ROOT
-        
-        # Download minimal SDK tools
-        cd $ANDROID_SDK_ROOT
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip
-        unzip -q commandlinetools-linux-8512546_latest.zip
-        mkdir -p cmdline-tools/latest
-        mv cmdline-tools/* cmdline-tools/latest/ || true
-        
-        # Set environment for next steps
-        echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
-        echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
-        echo "PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
-        
-    - name: Pre-build diagnostics
-      run: |
-        echo "🔍 Cache status:"
-        ls -la ~/.buildozer/ 2>/dev/null || echo "No .buildozer cache"
-        ls -la ~/android-sdk/ 2>/dev/null || echo "No android-sdk cache"
-        
-        echo "🧹 Cleaning any stuck processes:"
-        pkill -f gradle || true
-        pkill -f java || true
-        
-        echo "💾 Available space:"
-        df -h /
-      run: |
-        export ANDROID_SDK_ROOT=$HOME/android-sdk
-        export ANDROID_HOME=$HOME/android-sdk
-        export PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$PATH
-        
-        # Accept licenses
-        yes | sdkmanager --licenses > /dev/null 2>&1 || true
-        
-        # Install minimal required components
-        sdkmanager "platforms;android-30" "build-tools;30.0.3" "ndk;23.1.7779620"
-        
-    - name: Cache Buildozer and Android components
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.buildozer
-          ~/android-sdk
-          ~/.gradle/caches
-        key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}-v2
-        restore-keys: |
-          buildozer-${{ runner.os }}-v2
-          buildozer-${{ runner.os }}-
-          
-    - name: Build with Buildozer (with timeout protection)
-      timeout-minutes: 25
-      run: |
-        export ANDROID_SDK_ROOT=$HOME/android-sdk
-        export ANDROID_HOME=$HOME/android-sdk
-        export PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$PATH
-        export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
-        
-        # Optimize for faster builds
-        export GRADLE_OPTS="-Xmx2048m --daemon"
-        export _JAVA_OPTIONS="-Xmx1536m"
-        
-        # Clean any stuck processes
-        pkill -f gradle || true
-        buildozer android clean
-        
-        # Build with progress monitoring
-        echo "🚀 Starting build at $(date)"
-        (
-          buildozer -v android debug &
-          BUILD_PID=$!
-          
-          # Monitor progress every 2 minutes
-          while kill -0 $BUILD_PID 2>/dev/null; do
-            sleep 120
-            echo "⏳ Still building... $(date)"
-            echo "📊 Memory usage: $(free -h | grep Mem)"
-            echo "💿 Disk usage: $(df -h / | tail -1)"
-            
-            # Check if gradle is stuck
-            if pgrep -f gradle > /dev/null; then
-              echo "🔄 Gradle processes running: $(pgrep -f gradle | wc -l)"
-            fi
-          done
-          
-          wait $BUILD_PID
-        )
-        
-    - name: Check for APK
-      run: |
-        if ls bin/*.apk 1> /dev/null 2>&1; then
-          APK_FILE=$(ls bin/*.apk | head -1)
-          echo "✅ APK built successfully: $APK_FILE"
-          echo "APK size: $(du -h $APK_FILE | cut -f1)"
-          echo "APK_PATH=$APK_FILE" >> $GITHUB_ENV
-        else
-          echo "❌ No APK found in bin/"
-          echo "Searching for APK files..."
-          find . -name "*.apk" -type f 2>/dev/null || echo "No APK files found anywhere"
+        # Check for build success
+        if grep -q "Build failed" build.log; then
+          echo "::error::Build failed"
+          cat build.log
           exit 1
         fi
-        
-    - name: Upload APK
-      if: success()
-      uses: actions/upload-artifact@v3
+    
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v4
       with:
-        name: mobile-app-apk
-        path: ${{ env.APK_PATH }}
-        
-    - name: Upload logs on failure
-      if: failure()
-      uses: actions/upload-artifact@v3
-      with:
-        name: build-logs
-        path: |
-          build.log
-          .buildozer/android/platform/build-*/build/outputs/logs/
-        if-no-files-found: ignore
+        name: mobile-money-apk
+        path: bin/*.apk
