@@ -1,4 +1,4 @@
-- name: Accept licenses and install componentsname: Build Mobile Application
+- name: Accept licenses and install componentsname:Build Mobile Application
 on:
   push:
     branches: [main, master]
