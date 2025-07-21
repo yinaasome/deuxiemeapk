@@ -1,32 +1,29 @@
-name: Build Mobile Money App
+name: Construction Application Mobile Money
 
 on:
   push:
     branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
   workflow_dispatch:
 
 env:
-  PYTHON_VERSION: '3.9'
-  ANDROID_API_LEVEL: '33'
-  ANDROID_BUILD_TOOLS: '33.0.0'
-  ANDROID_NDK_VERSION: '25.2.9519653'
-  BUILDOZER_SPEC_FILE: 'buildozer.spec'
+  VERSION_PYTHON: '3.9'
+  VERSION_ANDROID_API: '33'
+  VERSION_BUILD_TOOLS: '33.0.0'
+  VERSION_NDK: '25.2.9519653'
 
 jobs:
-  build:
+  construction:
     runs-on: ubuntu-latest
     
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up Python ${{ env.PYTHON_VERSION }}
+    - name: Configurer Python ${{ env.VERSION_PYTHON }}
       uses: actions/setup-python@v4
       with:
-        python-version: ${{ env.PYTHON_VERSION }}
+        python-version: ${{ env.VERSION_PYTHON }}
     
-    - name: Install system dependencies
+    - name: Installer les dépendances système
       run: |
         sudo apt-get update
         sudo apt-get install -y \
@@ -34,87 +31,78 @@ jobs:
           python3-pip autoconf libtool \
           pkg-config zlib1g-dev libncurses5-dev \
           libncursesw5-dev libtinfo6 cmake \
-          libffi-dev libssl-dev libltdl-dev \
-          libxml2-dev libxslt-dev
+          libffi-dev libssl-dev libltdl-dev
         
-    - name: Install Python dependencies
+    - name: Installer les dépendances Python
       run: |
         python -m pip install --upgrade pip wheel
         pip install --upgrade buildozer cython==0.29.33 kivy==2.3.0
         
-    - name: Setup Android SDK
+    - name: Configurer Android SDK
       uses: android-actions/setup-android@v3
       with:
-        api-level: ${{ env.ANDROID_API_LEVEL }}
-        build-tools: ${{ env.ANDROID_BUILD_TOOLS }}
-        ndk-version: ${{ env.ANDROID_NDK_VERSION }}
-        cmake-version: '3.22.1'
+        api-level: ${{ env.VERSION_ANDROID_API }}
+        build-tools: ${{ env.VERSION_BUILD_TOOLS }}
+        ndk-version: ${{ env.VERSION_NDK }}
         
-    - name: Configure environment
+    - name: Configurer l'environnement
       run: |
         echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
-        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${{ env.ANDROID_NDK_VERSION }}" >> $GITHUB_ENV
+        echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${{ env.VERSION_NDK }}" >> $GITHUB_ENV
         echo "PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools" >> $GITHUB_ENV
         
-    - name: Accept Android licenses
+    - name: Accepter les licences Android
       run: |
         yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
         
-    - name: Configure Buildozer
+    - name: Préparer la configuration Buildozer
       run: |
-        mkdir -p ~/.buildozer
-        cat > ~/.buildozer/buildozer.spec <<EOL
+        mkdir -p ~/.buildozer/android/packages
+        cat > ~/.buildozer/default.cfg <<EOL
+        [app]
+        title = Orange Money
+        package.name = orangemoney
+        package.domain = org.orange
+        version = 1.0
+        requirements = python3==3.9.*,kivy==2.3.0
+        android.api = ${{ env.VERSION_ANDROID_API }}
+        android.minapi = 21
+        android.ndk = ${{ env.VERSION_NDK }}
+        android.sdk = ${{ env.VERSION_ANDROID_API }}
+        android.build_tools = ${{ env.VERSION_BUILD_TOOLS }}
+        android.arch = armeabi-v7a
+        
         [buildozer]
         log_level = 2
         android.accept_sdk_license = True
         android.sdk_path = $ANDROID_HOME
         android.ndk_path = $ANDROID_NDK_HOME
-        android.ant_path = /usr/share/ant
         android.maven_repo = https://maven.google.com
         android.maven_repo_backup = https://dl.google.com/dl/android/maven2
-        android.api = ${{ env.ANDROID_API_LEVEL }}
-        android.minapi = 21
-        android.ndk_version = ${{ env.ANDROID_NDK_VERSION }}
-        android.build_tools_version = ${{ env.ANDROID_BUILD_TOOLS }}
         EOL
         
-    - name: Pre-download dependencies
+    - name: Construire l'APK avec Buildozer
       run: |
-        # Pre-download common problematic packages
-        wget https://python-for-android.googlecode.com/files/python3-3.9.1-armeabi-v7a.zip -O ~/.buildozer/android/packages/python3-3.9.1-armeabi-v7a.zip
-        wget https://github.com/kivy/python-for-android/raw/develop/pythonforandroid/recipes/kivy/__init__.py -O ~/.buildozer/android/packages/kivy-2.3.0.zip
-        
-    - name: Build with Buildozer
-      run: |
-        # Clean previous builds
-        rm -rf .buildozer/android/platform/build-*
-        
-        # Build with verbose output
         buildozer -v android debug 2>&1 | tee build.log
-        
-        # Check for errors
         if grep -q "Download failed" build.log; then
-          echo "::error::Download failed during build process"
+          echo "::error::Échec de téléchargement pendant la construction"
           cat build.log
           exit 1
         fi
         
-    - name: Verify APK
+    - name: Vérifier l'APK généré
       run: |
         APK_FILE=$(ls bin/*.apk 2>/dev/null | head -n 1)
-        
         if [ -z "$APK_FILE" ]; then
-          echo "::error::No APK file was generated!"
-          echo "Build log contents:"
+          echo "::error::Aucun APK généré!"
           cat build.log
           exit 1
         fi
-        
-        echo "Generated APK: $APK_FILE"
+        echo "APK généré: $APK_FILE"
         echo "APK_PATH=$APK_FILE" >> $GITHUB_ENV
         
-    - name: Upload APK artifact
+    - name: Téléverser l'APK
       uses: actions/upload-artifact@v4
       with:
-        name: mobile-money-apk
+        name: orange-money-apk
         path: ${{ env.APK_PATH }}
