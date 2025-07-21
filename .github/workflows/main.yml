@@ -1,4 +1,4 @@
-name: Build Mobile Application
+- name: Accept licenses and install componentsname: Build Mobile Application
 on:
   push:
     branches: [main, master]
@@ -96,7 +96,18 @@ jobs:
         echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
         echo "PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
         
-    - name: Accept licenses and install components
+    - name: Pre-build diagnostics
+      run: |
+        echo "🔍 Cache status:"
+        ls -la ~/.buildozer/ 2>/dev/null || echo "No .buildozer cache"
+        ls -la ~/android-sdk/ 2>/dev/null || echo "No android-sdk cache"
+        
+        echo "🧹 Cleaning any stuck processes:"
+        pkill -f gradle || true
+        pkill -f java || true
+        
+        echo "💾 Available space:"
+        df -h /
       run: |
         export ANDROID_SDK_ROOT=$HOME/android-sdk
         export ANDROID_HOME=$HOME/android-sdk
@@ -108,34 +119,55 @@ jobs:
         # Install minimal required components
         sdkmanager "platforms;android-30" "build-tools;30.0.3" "ndk;23.1.7779620"
         
-    - name: Cache Buildozer global directory
+    - name: Cache Buildozer and Android components
       uses: actions/cache@v3
       with:
-        path: ~/.buildozer
-        key: ${{ runner.os }}-buildozer-${{ hashFiles('**/*.spec') }}
+        path: |
+          ~/.buildozer
+          ~/android-sdk
+          ~/.gradle/caches
+        key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}-v2
         restore-keys: |
-          ${{ runner.os }}-buildozer-
+          buildozer-${{ runner.os }}-v2
+          buildozer-${{ runner.os }}-
           
-    - name: Build with Buildozer
+    - name: Build with Buildozer (with timeout protection)
+      timeout-minutes: 25
       run: |
         export ANDROID_SDK_ROOT=$HOME/android-sdk
         export ANDROID_HOME=$HOME/android-sdk
         export PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$PATH
         export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
         
-        # Reduce memory usage
-        export GRADLE_OPTS="-Xmx1536m"
+        # Optimize for faster builds
+        export GRADLE_OPTS="-Xmx2048m --daemon"
         export _JAVA_OPTIONS="-Xmx1536m"
         
-        # Build with less verbosity first
-        echo "Starting build..."
-        if ! buildozer android debug > build.log 2>&1; then
-          echo "Build failed. Last 100 lines of log:"
-          tail -100 build.log
+        # Clean any stuck processes
+        pkill -f gradle || true
+        buildozer android clean
+        
+        # Build with progress monitoring
+        echo "🚀 Starting build at $(date)"
+        (
+          buildozer -v android debug &
+          BUILD_PID=$!
           
-          echo "Trying with verbose output..."
-          buildozer -v android debug
-        fi
+          # Monitor progress every 2 minutes
+          while kill -0 $BUILD_PID 2>/dev/null; do
+            sleep 120
+            echo "⏳ Still building... $(date)"
+            echo "📊 Memory usage: $(free -h | grep Mem)"
+            echo "💿 Disk usage: $(df -h / | tail -1)"
+            
+            # Check if gradle is stuck
+            if pgrep -f gradle > /dev/null; then
+              echo "🔄 Gradle processes running: $(pgrep -f gradle | wc -l)"
+            fi
+          done
+          
+          wait $BUILD_PID
+        )
         
     - name: Check for APK
       run: |
