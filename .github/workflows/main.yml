@@ -10,6 +10,7 @@ env:
   ANDROID_API: 33
   BUILD_TOOLS: '33.0.0'
   NDK_VERSION: '25.2.9519653'
+  CMAKE_VERSION: '3.22.1'
 
 jobs:
   build:
@@ -39,13 +40,14 @@ jobs:
         python -m pip install --upgrade pip wheel
         pip install buildozer cython==0.29.33 kivy==2.3.0
 
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-      with:
-        api-level: ${{ env.ANDROID_API }}
-        build-tools: ${{ env.BUILD_TOOLS }}
-        ndk-version: ${{ env.NDK_VERSION }}
-        cmake-version: '3.22.1'
+    - name: Setup Android SDK (new method)
+      run: |
+        # Install Android SDK components manually
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+          "platforms;android-${{ env.ANDROID_API }}" \
+          "build-tools;${{ env.BUILD_TOOLS }}" \
+          "ndk;${{ env.NDK_VERSION }}" \
+          "cmake;${{ env.CMAKE_VERSION }}"
 
     - name: Configure environment
       run: |
