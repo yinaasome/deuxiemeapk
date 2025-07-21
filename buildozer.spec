@@ -1,67 +1,50 @@
 [app]
-# (str) Title of your application
-title = Mobile Money App
 
-# (str) Package name
-package.name = mobilemoneyapp
+# Titre de l'application
+title = Mobile Money
 
-# (str) Package domain (needed for android/ios packaging)
-package.domain = org.mobilemoney
+# Nom du package (doit être unique)
+package.name = mobilemoney
 
-# (str) Source code where the main.py live
+# Domaine du package (convention inversée)
+package.domain = org.orange
+
+# Version de l'application (format: 1.2.0)
+version = 1.0.0
+
+# Configuration de l'APK
+android.permissions = INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
+android.api = 33
+android.minapi = 21
+android.ndk = 25.2.9519653
+android.sdk = 33
+android.gradle_dependencies = 'com.android.tools.build:gradle:7.2.2'
+android.allow_backup = False
+android.arch = armeabi-v7a
+
+# Configuration de la compilation
 source.dir = .
-
-# (list) Source files to include (let empty to include all the files)
-source.include_exts = py,png,jpg,kv,atlas
-
-# (list) List of directory to exclude (let empty to not exclude anything)
-source.exclude_dirs = tests, bin, .buildozer, .git, __pycache__, .github
-
-# (str) Application versioning (method 1)
-version = 1.0
-
-# (list) Application requirements - simplified for compatibility
-requirements = python3==3.9.*, kivy==2.1.0
-
-# (str) Supported orientation (landscape, sensorLandscape, portrait or all)
+source.include_exts = py,png,jpg,kv,ttf,json
+requirements = python3==3.9.*,kivy==2.3.0,plyer,sqlite3,pandas,matplotlib,numpy,openpyxl
 orientation = portrait
-
-# (bool) Indicate if the application should be fullscreen or not
 fullscreen = 0
 
-# (list) Permissions
-android.permissions = INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
-
-# (list) The Android archs to build for - single arch to avoid complications
-android.archs = armeabi-v7a
-
-# (bool) enables Android auto backup feature (Android API >=23)
-android.allow_backup = True
-
-# (str) The format used to package the app for debug mode (apk or aar).
-android.debug_artifact = apk
-
-# (int) Target Android API - using older API for better compatibility
-android.api = 31
-
-# (int) Minimum API your APK will support.
-android.minapi = 21
-
-# (int) Android SDK version to use
-android.sdk = 31
-
-# (str) Android NDK version to use
-android.ndk = 25b
-
-# (bool) Use --private data storage (True) or --dir public storage (False)
-android.private_storage = True
-
-# (bool) If True, then automatically accept SDK license
-android.accept_sdk_license = True
-
-[buildozer]
-# (int) Log level (0 = error only, 1 = info, 2 = debug (with command output))
+# Options de build
 log_level = 2
+android.accept_sdk_license = True
+p4a.branch = master
 
-# (int) Display warning if buildozer is run as root (0 = False, 1 = True)
-warn_on_root = 1
+# Configuration Kivy
+kivy.graphics = opengl, sdl2
+kivy.window = sdl2
+
+# Icones et presse-papiers
+icon.filename = %(source.dir)s/data/icon.png
+presplash.filename = %(source.dir)s/data/presplash.png
+
+# Configuration release
+# (commenté par défaut - à décommenter pour les builds de production)
+#[buildozer]
+#log_level = 2
+#android.debug = 0
+#android.release_artifact = .apk
