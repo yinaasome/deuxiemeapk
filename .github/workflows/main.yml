@@ -102,11 +102,11 @@ jobs:
         
     - name: Fix SDK Manager Path
       run: |
-      # Create the expected tools/bin directory structure
-      mkdir -p $HOME/.buildozer/android/platform/android-sdk/tools/bin
-      # Create symlinks to the actual SDK manager location
-      ln -sf ../../cmdline-tools/latest/bin/sdkmanager $HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
-      ln -sf ../../cmdline-tools/latest/bin/avdmanager $HOME/.buildozer/android/platform/android-sdk/tools/bin/avdmanager
+       # Create the expected tools/bin directory structure
+       mkdir -p $HOME/.buildozer/android/platform/android-sdk/tools/bin
+       # Create symlinks to the actual SDK manager location
+       ln -sf ../../cmdline-tools/latest/bin/sdkmanager $HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+       ln -sf ../../cmdline-tools/latest/bin/avdmanager $HOME/.buildozer/android/platform/android-sdk/tools/bin/avdmanager
 
     - name: Build APK
       run: |
