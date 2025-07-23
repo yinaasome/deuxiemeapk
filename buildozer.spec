@@ -93,7 +93,11 @@ fullscreen = 0
 
 # (list) Permissions
 android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
-
+- name: Fix Permissions
+  run: |
+    chmod +x $ANDROID_HOME/cmdline-tools/latest/bin/*
+    chmod +x ~/.buildozer/android/platform/android-sdk/tools/bin/* || true
+    
 # (list) Android application meta-data to set (key=value format)
 #android.meta_data =
 
