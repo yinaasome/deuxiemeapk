@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Construire l'APK Android
 
 on:
   push:
@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
+    - name: Checkout du dépôt
       uses: actions/checkout@v4
 
     - name: Set up Python
@@ -97,15 +97,17 @@ jobs:
           cp apk3.py main.py
         fi
 
-    - name: Fix SDK Manager Path for Buildozer
+    - name: Corriger le chemin du SDK Manager pour Buildozer
       run: |
-        # Create the legacy tools directory structure that Buildozer expects
-        mkdir -p $HOME/.buildozer/android/platform/android-sdk/tools
-        # Create symlink to the actual SDK manager location
+        # Créer la structure de répertoires legacy que Buildozer attend
+        mkdir -p $HOME/.buildozer/android/platform/android-sdk/tools/bin
+        
+        # Créer les liens symboliques vers l'emplacement réel des outils
         ln -sf $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager $HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
         ln -sf $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/avdmanager $HOME/.buildozer/android/platform/android-sdk/tools/bin/avdmanager
-        # Also create the expected directory structure if it doesn't exist
-        mkdir -p $HOME/.buildozer/android/platform/android-sdk/tools/bin
+        
+        # Vérifier que les liens ont bien été créés
+        ls -la $HOME/.buildozer/android/platform/android-sdk/tools/bin/
 
     - name: Build APK
       run: |
