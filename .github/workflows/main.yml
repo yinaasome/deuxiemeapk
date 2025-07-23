@@ -81,8 +81,11 @@ jobs:
         # Accept licenses
         yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
         
-        # Install required SDK components
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-31" "build-tools;31.0.0" "ndk;28.2.13676358"
+        # Installer les composants SDK requis
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-31" "build-tools;31.0.0"
+        
+        # Installer NDK version 25b (version minimale requise)
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;25.1.8937393"
 
     - name: Set up environment variables
       run: |
