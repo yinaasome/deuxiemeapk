@@ -1,4 +1,4 @@
-name: Build Android APK (Alternative)
+name: Build Android APK
 
 on:
   push:
@@ -15,31 +15,10 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Setup Python
+    - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
-
-    - name: Setup Java JDK
-      uses: actions/setup-java@v3
-      with:
-        distribution: 'temurin'
-        java-version: '11'
-
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-      with:
-        api-level: 31
-        build-tools: 31.0.0
-        ndk-version: 23.1.7779620
-
-    - name: Cache pip dependencies
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
 
     - name: Cache buildozer global directory
       uses: actions/cache@v3
@@ -59,6 +38,7 @@ jobs:
         sudo apt-get install -y \
           build-essential \
           git \
+          python3 \
           python3-dev \
           ffmpeg \
           libsdl2-dev \
@@ -70,102 +50,106 @@ jobs:
           libavformat-dev \
           libavcodec-dev \
           zlib1g-dev \
-          libgstreamer1.0-dev \
+          libgstreamer1.0 \
           gstreamer1.0-plugins-base \
           gstreamer1.0-plugins-good \
-          autoconf \
-          automake \
-          libtool \
-          pkg-config
+          openjdk-11-jdk \
+          unzip
 
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
         pip install buildozer
         pip install cython==0.29.33
-        pip install wheel
 
-    - name: Create main.py if needed
+    - name: Set up Android SDK
+      run: |
+        mkdir -p $HOME/.buildozer/android/platform
+        cd $HOME/.buildozer/android/platform
+        
+        # Download Android SDK Command Line Tools
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip
+        unzip -q commandlinetools-linux-8512546_latest.zip
+        mkdir -p android-sdk/cmdline-tools
+        mv cmdline-tools android-sdk/cmdline-tools/latest
+        
+        # Set environment variables
+        export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
+        export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
+        
+        # Accept licenses
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+        
+        # Install required SDK components
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-31" "build-tools;31.0.0" "ndk;23.1.7779620"
+
+    - name: Set up environment variables
+      run: |
+        echo "ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk" >> $GITHUB_ENV
+        echo "ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk" >> $GITHUB_ENV
+        echo "ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-sdk/ndk/23.1.7779620" >> $GITHUB_ENV
+        echo "PATH=$PATH:$HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$HOME/.buildozer/android/platform/android-sdk/platform-tools" >> $GITHUB_ENV
+
+    - name: Create main.py if it doesn't exist
       run: |
         if [ ! -f main.py ]; then
           cp apk3.py main.py
         fi
 
-    - name: Setup buildozer android directories
+    - name: Validate buildozer.spec
       run: |
-        buildozer android p4a -- --help || true
-        
-        # Create necessary directories
-        mkdir -p ~/.buildozer/android/platform
-        
-        # Link Android SDK for buildozer
-        if [ ! -d ~/.buildozer/android/platform/android-sdk ]; then
-          ln -sf $ANDROID_SDK_ROOT ~/.buildozer/android/platform/android-sdk
-        fi
-
-    - name: Set Android environment for buildozer
-      run: |
-        echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-        echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-        echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/23.1.7779620" >> $GITHUB_ENV
-
-    - name: Accept Android licenses
-      run: |
-        yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
-
-    - name: Build APK with buildozer
-      run: |
-        # Build the APK
         buildozer android debug --verbose
-      env:
-        ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
-        ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
-
-    - name: Verify APK was created
+        
+    - name: Fix SDK Manager Path
       run: |
-        ls -la bin/
-        file bin/*.apk || echo "No APK found"
+      # Create the expected tools/bin directory structure
+      mkdir -p $HOME/.buildozer/android/platform/android-sdk/tools/bin
+      # Create symlinks to the actual SDK manager location
+      ln -sf ../../cmdline-tools/latest/bin/sdkmanager $HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+      ln -sf ../../cmdline-tools/latest/bin/avdmanager $HOME/.buildozer/android/platform/android-sdk/tools/bin/avdmanager
+
+    - name: Build APK
+      run: |
+        buildozer android debug
 
     - name: Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
-        name: mobile-money-debug-apk
+        name: mobile-money-apk
         path: bin/*.apk
-        if-no-files-found: error
 
-    - name: Create Release on Tag
+    - name: Create Release (on tag)
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
         files: bin/*.apk
-        name: Mobile Money v${{ github.ref_name }}
+        name: Mobile Money App ${{ github.ref_name }}
         body: |
-          📱 **Mobile Money Application - Version ${{ github.ref_name }}**
+          🚀 **Mobile Money App - Version ${{ github.ref_name }}**
           
-          ### Nouvelles fonctionnalités :
-          - Gestion complète des transactions Mobile Money
-          - Interface agent et administrateur
-          - Statistiques détaillées et exports
+          ### 📱 Fonctionnalités
+          - Gestion des transactions Mobile Money
+          - Interface pour agents et administrateurs
+          - Statistiques et exports
           - Base de données SQLite intégrée
           
-          ### Installation :
+          ### 📋 Instructions d'installation
           1. Téléchargez le fichier APK
-          2. Activez "Sources inconnues" dans Android
-          3. Installez l'application
+          2. Activez "Sources inconnues" dans les paramètres Android
+          3. Installez l'APK
           
-          ### Connexion par défaut :
-          - **Administrateur** : `admin` / `admin123`
+          ### 🔐 Connexion par défaut
+          - **Admin**: `admin` / `admin123`
           
           ---
-          Build automatique via GitHub Actions ⚡
+          Généré automatiquement par GitHub Actions
         draft: false
         prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Cleanup on failure
+    - name: Clean up build cache (if build fails)
       if: failure()
       run: |
-        echo "Build failed, cleaning up..."
-        rm -rf .buildozer/android/platform/build-*
-        ls -la .buildozer/ || echo "No buildozer directory"
+        rm -rf .buildozer/android/platform/build
+        rm -rf .buildozer/android/app
