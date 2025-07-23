@@ -1,4 +1,4 @@
-name: Construire l'APK Android
+name: Build Android APK
 
 on:
   push:
@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout du dépôt
+    - name: Checkout repository
       uses: actions/checkout@v4
 
     - name: Set up Python
@@ -20,16 +20,12 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Cache buildozer global directory
+    - name: Cache buildozer directories
       uses: actions/cache@v3
       with:
-        path: .buildozer_global
-        key: buildozer-global-${{ hashFiles('buildozer.spec') }}
-
-    - name: Cache buildozer directory
-      uses: actions/cache@v3
-      with:
-        path: .buildozer
+        path: |
+          .buildozer
+          .buildozer_global
         key: buildozer-${{ hashFiles('buildozer.spec') }}
 
     - name: Install system dependencies
@@ -38,7 +34,6 @@ jobs:
         sudo apt-get install -y \
           build-essential \
           git \
-          python3 \
           python3-dev \
           ffmpeg \
           libsdl2-dev \
@@ -54,25 +49,25 @@ jobs:
           gstreamer1.0-plugins-base \
           gstreamer1.0-plugins-good \
           openjdk-11-jdk \
-          unzip
+          unzip \
+          wget
 
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install buildozer
-        pip install cython==0.29.33
+        pip install buildozer cython==0.29.33
 
-    - name: Set up Android SDK
+    - name: Set up Android SDK with NDK r28c
       run: |
         mkdir -p $HOME/.buildozer/android/platform
         cd $HOME/.buildozer/android/platform
         
-        # Download Android SDK Command Line Tools
+        # Install Android Command Line Tools
         wget -q https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip
         unzip -q commandlinetools-linux-8512546_latest.zip
         mkdir -p android-sdk/cmdline-tools/latest
         mv cmdline-tools/* android-sdk/cmdline-tools/latest/
-        rmdir cmdline-tools
+        rm -r cmdline-tools
         
         # Set environment variables
         export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
@@ -81,72 +76,56 @@ jobs:
         # Accept licenses
         yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
         
-        # Installer les composants SDK requis
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-31" "build-tools;31.0.0"
-        
-        # Installer NDK version 25b (version minimale requise)
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;25.1.8937393"
+        # Install required components
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+          "platform-tools" \
+          "platforms;android-31" \
+          "build-tools;31.0.0" \
+          "ndk;28.2.13676358"  # NDK r28c
 
     - name: Set up environment variables
       run: |
         echo "ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk" >> $GITHUB_ENV
         echo "ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk" >> $GITHUB_ENV
-        echo "ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-sdk/ndk/23.1.7779620" >> $GITHUB_ENV
-        echo "PATH=$PATH:$HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$HOME/.buildozer/android/platform/android-sdk/platform-tools" >> $GITHUB_ENV
+        echo "ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-sdk/ndk/28.2.13676358" >> $GITHUB_ENV
+        echo "PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools" >> $GITHUB_ENV
 
-    - name: Create main.py if it doesn't exist
+    - name: Create main.py if missing
       run: |
         if [ ! -f main.py ]; then
           cp apk3.py main.py
         fi
 
-    - name: Corriger le chemin du SDK Manager pour Buildozer
+    - name: Fix SDK Manager paths
       run: |
-        # Créer la structure de répertoires legacy que Buildozer attend
         mkdir -p $HOME/.buildozer/android/platform/android-sdk/tools/bin
-        
-        # Créer les liens symboliques vers l'emplacement réel des outils
-        ln -sf $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager $HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
-        ln -sf $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/avdmanager $HOME/.buildozer/android/platform/android-sdk/tools/bin/avdmanager
-        
-        # Vérifier que les liens ont bien été créés
-        ls -la $HOME/.buildozer/android/platform/android-sdk/tools/bin/
+        ln -sf $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager $ANDROID_HOME/tools/bin/sdkmanager
+        ln -sf $ANDROID_HOME/cmdline-tools/latest/bin/avdmanager $ANDROID_HOME/tools/bin/avdmanager
 
-    - name: Build APK
+    - name: Build APK with Buildozer
       run: |
         buildozer -v android debug
 
     - name: Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
-        name: mobile-money-apk
+        name: app-release
         path: bin/*.apk
 
-    - name: Create Release (on tag)
+    - name: Create GitHub Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
         files: bin/*.apk
-        name: Mobile Money App ${{ github.ref_name }}
+        name: Release v${{ github.ref_name }}
         body: |
-          🚀 **Mobile Money App - Version ${{ github.ref_name }}**
+          ### Nouvelle version de l'application
+          **Version:** ${{ github.ref_name }}
           
-          ### 📱 Features
-          - Mobile Money transaction management
-          - Interface for agents and administrators
-          - Statistics and exports
-          - Integrated SQLite database
-          
-          ### 📋 Installation instructions
-          1. Download the APK file
-          2. Enable "Unknown sources" in Android settings
-          3. Install the APK
-          
-          ### 🔐 Default login
-          - **Admin**: `admin` / `admin123`
-          
-          ---
-          Automatically generated by GitHub Actions
+          ### Instructions
+          1. Télécharger le fichier APK
+          2. Activer "Sources inconnues"
+          3. Installer l'application
         draft: false
         prerelease: false
       env:
