@@ -1,0 +1,9 @@
+# Librairies de base intégrées à Python : pas besoin de les inclure
+# sqlite3, hashlib, datetime, os, io
+
+# Librairies tierces à installer
+pandas
+matplotlib
+numpy
+kivy
+plyer
