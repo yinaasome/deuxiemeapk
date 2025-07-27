@@ -115,36 +115,45 @@ jobs:
         echo "ANDROIDAPI=${{ env.ANDROID_API_LEVEL }}" >> $GITHUB_ENV
         echo "ANDROIDMINAPI=${{ env.ANDROID_MIN_API }}" >> $GITHUB_ENV
 
-    - name: Install Android SDK
+    - name: Install Android SDK and NDK
       run: |
-        cd $HOME/.buildozer/android/platform
-        
-        # Download and setup Command Line Tools
-        if [ ! -d "android-sdk" ]; then
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-          unzip -q commandlinetools-linux-9477386_latest.zip
-          mkdir -p android-sdk/cmdline-tools
-          mv cmdline-tools android-sdk/cmdline-tools/latest
-          rm commandlinetools-linux-9477386_latest.zip
-        fi
-        
-        wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip
-        unzip -q android-ndk-r25b-linux.zip
-        mv android-ndk-r25b ~/.buildozer/android/platform/android-ndk-r25b
+         # Aller dans le dossier plateforme de buildozer
+         mkdir -p $HOME/.buildozer/android/platform
+         cd $HOME/.buildozer/android/platform
 
-        # Fix toolchain path Buildozer‑compatible
-        ln -sf $HOME/.buildozer/android/platform/android-ndk-r25b/toolchains/llvm/prebuilt/linux-x86_64 \
-        $HOME/.buildozer/android/platform/android-ndk-r25b/prebuilt/linux-x86_64
+         # Télécharger et installer le SDK si nécessaire
+         if [ ! -d "android-sdk" ]; then
+             wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+             unzip -q commandlinetools-linux-9477386_latest.zip
+             mkdir -p android-sdk/cmdline-tools
+             mv cmdline-tools android-sdk/cmdline-tools/latest
+             rm commandlinetools-linux-9477386_latest.zip
+         fi
+
+          # Télécharger et installer proprement le NDK r25b
+          cd $HOME
+          wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip
+          unzip -q android-ndk-r25b-linux.zip
+          rm android-ndk-r25b-linux.zip
+
+          # Déplacer le NDK au bon endroit
+          mv android-ndk-r25b $HOME/.buildozer/android/platform/android-ndk-r25b
+
+          # Créer le lien symbolique attendu par python-for-android
+          ln -sf $HOME/.buildozer/android/platform/android-ndk-r25b/toolchains/llvm/prebuilt/linux-x86_64 \
+                 $HOME/.buildozer/android/platform/android-ndk-r25b/prebuilt/linux-x86_64
+
+
 
         
-        # Accept licenses and install components
-        yes | sdkmanager --licenses > /dev/null 2>&1 || true
-        sdkmanager --update
-        sdkmanager "platform-tools" "platforms;android-${{ env.ANDROID_API_LEVEL }}" "build-tools;31.0.0"
+           # Accept licenses and install components
+           yes | sdkmanager --licenses > /dev/null 2>&1 || true
+           sdkmanager --update
+           sdkmanager "platform-tools" "platforms;android-${{ env.ANDROID_API_LEVEL }}" "build-tools;31.0.0"
 
-        # 🔧 Fix for Buildozer: link sdkmanager to expected path
-        mkdir -p $ANDROID_HOME/tools/bin
-        ln -sf $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager $ANDROID_HOME/tools/bin/sdkmanager
+           # 🔧 Fix for Buildozer: link sdkmanager to expected path
+           mkdir -p $ANDROID_HOME/tools/bin
+           ln -sf $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager $ANDROID_HOME/tools/bin/sdkmanager
 
 
     - name: Validate app structure
