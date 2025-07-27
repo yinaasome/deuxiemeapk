@@ -21,8 +21,20 @@ android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,WAKE
 android.api = 31
 android.minapi = 21
 
-# ✅ Compatible NDK version
+# Fichier : buildozer.spec
+
+# Version NDK actuelle (minimum requis par python-for-android)
 android.ndk = 25b
+
+# Chemin vers le NDK (cohérent avec celui du script ci-dessus)
+android.ndk_path = ~/.buildozer/android/platform/android-ndk-r25b
+
+# Désactiver la mise à jour du SDK automatiquement
+p4a.skip_update = True
+p4a.accept_sdk_license = True
+
+# Branch principale pour éviter les versions anciennes
+p4a.branch = master
 
 # ❌ Supprimé les chemins forcés pour que Buildozer télécharge proprement
 # android.ndk_path = ~/.buildozer/android/platform/android-ndk-r25b
