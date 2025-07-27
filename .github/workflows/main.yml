@@ -252,7 +252,7 @@ jobs:
           - **Administrateur** : `admin` / `admin123`
           
           ---
-          Build automatique via GitHub Actions ✅
+          Build automatique via GitHub Actions
         draft: false
         prerelease: false
       env:
