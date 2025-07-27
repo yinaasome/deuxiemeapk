@@ -31,12 +31,23 @@ jobs:
         path: .buildozer
         key: ${{ runner.os }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('buildozer.spec') }}
 
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+        
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      
     - name: Build with Buildozer
       uses: ArtemSBulgakov/buildozer-action@v1
       id: buildozer
       with:
         command: buildozer android debug
         buildozer_version: master
+      env:
+        JAVA_HOME: ${{ env.JAVA_HOME_17_X64 }}
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
@@ -44,37 +55,25 @@ jobs:
         name: package
         path: bin/*.apk
 
-    - name: Checkout
-      uses: actions/checkout@v4
+    - name: Create release
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      uses: softprops/action-gh-release@v2
       with:
-        path: data
-
-    - name: Set up git repository
-      working-directory: data
-      run: |
-        git config user.name "github-actions"
-        git config user.email "action@github.com"
-
-    - name: Create APK directory if it doesn't exist
-      working-directory: data
-      run: mkdir -p apk
-
-    - name: Copy APK to repository
-      working-directory: data
-      run: |
-        find ../bin -name "*.apk" -exec cp {} apk/ \;
-        ls -la apk/
-
-    - name: Commit and push if APK exists
-      working-directory: data
-      run: |
-        if [ -n "$(ls -A apk/ 2>/dev/null)" ]; then
-          git add apk/
-          git commit -m "Add generated APK files" || exit 0
-          git push
-        else
-          echo "No APK files found"
-        fi
+        files: bin/*.apk
+        tag_name: v${{ github.run_number }}
+        name: Mobile Money Manager v${{ github.run_number }}
+        body: |
+          APK automatiquement généré pour Mobile Money Manager
+          
+          **Installation :**
+          1. Téléchargez le fichier APK
+          2. Activez "Sources inconnues" sur Android
+          3. Installez l'APK
+          4. Connectez-vous avec : admin / admin123
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Comment PR
       uses: actions/github-script@v7
