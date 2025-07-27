@@ -37,7 +37,7 @@ version = 1.0
 
 # (list) Application requirements
 # comma separated e.g. requirements = sqlite3,kivy
-requirements = python3,kivy==2.3.1,sqlite3,pandas,matplotlib,numpy,pillow,plyer,openpyxl
+requirements = python3,kivy==2.3.1,sqlite3,pandas,matplotlib,numpy,pillow,plyer,openpyxl,cython
 
 # (str) Custom source folders for requirements
 # Sets custom source for any requirements with recipes
@@ -95,10 +95,67 @@ fullscreen = 0
 
 # (list) Permissions
 # (See https://python-for-android.readthedocs.io/en/latest/buildoptions/#build-options-1 for all the supported syntaxes and properties)
-android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
+android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,WAKE_LOCK
 
 # (list) Android application meta-data to set (key=value format)
-#android.meta_data =
+android.meta_data = 
+
+# (str) Android entry point, default is ok for Kivy-based app
+#android.entrypoint = org.kivy.android.PythonActivity
+
+# (str) Full name including package path of the Java class that implements Android Activity
+# use that parameter together with android.entrypoint to set custom Java class instead of PythonActivity
+#android.activity_class_name = org.kivy.android.PythonActivity
+
+# (str) Full name including package path of the Java class that implements Python Service
+# use that parameter to set custom Java class instead of PythonService
+#android.service_class_name = org.kivy.android.PythonService
+
+# (str) Android app theme, default is ok for Kivy-based app
+# android.apptheme = "@android:style/Theme.NoTitleBar"
+
+# (list) Pattern to whitelist for the whole project
+#android.whitelist =
+
+# (str) Android additional libraries to copy into libs/armeabi
+#android.add_src =
+
+# (list) Java files to add to the android project (can be java or a directory containing the files)
+#android.add_java_dir =
+
+# (str) OUYA Console category. Should be one of GAME or APP
+# If you leave this blank, OUYA support will not be enabled
+#android.ouya.category = GAME
+
+# (str) Filename of OUYA Console icon. It must be a 732x412 png image.
+#android.ouya.icon.filename = %(source.dir)s/data/ouya_icon.png
+
+# (str) XML file to include as an intent filters in <activity> tag
+#android.manifest.intent_filters =
+
+# (str) launchMode to set for the main activity
+#android.manifest.launch_mode = standard
+
+# (str) screenOrientation to set for the main activity.
+# Valid values can be found at https://developer.android.com/guide/topics/manifest/activity-element.html#screen
+#android.manifest.orientation = portrait
+
+# (list) Android additional java compile options
+# this can for example be necessary when importing certain java libraries using the 'android.gradle_dependencies' option
+# see https://developer.android.com/studio/write/java8-support for further information
+# android.add_compile_options = "sourceCompatibility = 1.8", "targetCompatibility = 1.8"
+
+# (list) Gradle repositories to be used in Android project
+# android.gradle_repositories = google(), mavenCentral()
+
+# (list) Android gradle dependencies to add
+#android.gradle_dependencies =
+
+# (list) Java classes to import for this APK
+#android.add_java_dir =
+
+# (str) AIDL files to add
+#android.add_aidl =
 
 # (list) Android library project to add (will be added in the
 # project.properties automatically.)
@@ -150,10 +207,10 @@ android.allow_backup = True
 #p4a.url =
 
 # (str) python-for-android fork to use in case if you want to use a fork
-#p4a.fork = kivy
+p4a.fork = kivy
 
 # (str) python-for-android branch to use, defaults to master
-#p4a.branch = master
+p4a.branch = develop
 
 # (str) python-for-android specific commit to use, defaults to HEAD, must be within p4a.branch
 #p4a.commit = HEAD
@@ -168,7 +225,7 @@ android.allow_backup = True
 # p4a.whitelist =
 
 # (bool) If True, bootstrap will always run (used for local or modified recipes)
-# p4a.bootstrap = sdl2
+p4a.bootstrap = sdl2
 
 # (int) port number to specify an explicit --port= p4a argument (eg for bootstrap flask)
 #p4a.port =
