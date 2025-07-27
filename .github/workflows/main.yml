@@ -1,42 +1,89 @@
-name: Build APK
+name: Build Android APK
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
-    - name: Install system dependencies
+    - name: Get Date
+      id: get-date
       run: |
-        sudo apt update
-        sudo apt install -y \
-          build-essential \
-          git \
-          zip \
-          unzip \
-          openjdk-11-jdk \
-          python3-pip \
-          python3-setuptools \
-          python3-wheel \
-          python3-dev \
-          libffi-dev \
-          libssl-dev \
-          libjpeg-dev \
-          zlib1g-dev \
-          libncurses5
+        echo "date=$(/bin/date -u "+%Y%m%d")" >> $GITHUB_OUTPUT
 
-    - name: Set up Python and Buildozer
-      run: |
-        pip install --upgrade pip
-        pip install cython virtualenv buildozer
+    - name: Cache Buildozer global directory
+      uses: actions/cache@v4
+      with:
+        path: .buildozer_global
+        key: buildozer-global-${{ hashFiles('buildozer.spec') }}
 
-    - name: Build APK
+    - name: Cache Buildozer directory
+      uses: actions/cache@v4
+      with:
+        path: .buildozer
+        key: ${{ runner.os }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('buildozer.spec') }}
+
+    - name: Build with Buildozer
+      uses: ArtemSBulgakov/buildozer-action@v1
+      id: buildozer
+      with:
+        command: buildozer android debug
+        buildozer_version: master
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: package
+        path: bin/*.apk
+
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        path: data
+
+    - name: Set up git repository
+      working-directory: data
       run: |
-        buildozer android debug
+        git config user.name "github-actions"
+        git config user.email "action@github.com"
+
+    - name: Create APK directory if it doesn't exist
+      working-directory: data
+      run: mkdir -p apk
+
+    - name: Copy APK to repository
+      working-directory: data
+      run: |
+        find ../bin -name "*.apk" -exec cp {} apk/ \;
+        ls -la apk/
+
+    - name: Commit and push if APK exists
+      working-directory: data
+      run: |
+        if [ -n "$(ls -A apk/ 2>/dev/null)" ]; then
+          git add apk/
+          git commit -m "Add generated APK files" || exit 0
+          git push
+        else
+          echo "No APK files found"
+        fi
+
+    - name: Comment PR
+      uses: actions/github-script@v7
+      if: github.event_name == 'pull_request'
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '✅ APK Build completed! Check the artifacts to download the APK file.'
+          })
