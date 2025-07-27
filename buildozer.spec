@@ -1,3 +1,4 @@
+[app]
 title = Mobile Money Manager
 package.name = mobilemoneymanager
 package.domain = org.mobilemoney
