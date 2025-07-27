@@ -16,7 +16,7 @@ android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 # Spécification du SDK/NDK/API
 android.api = 33
 android.minapi = 21
-android.ndk = 23b
+android.ndk = 27d
 android.ndk_api = 21
 android.gradle_dependencies = androidx.appcompat:appcompat:1.1.0
 
