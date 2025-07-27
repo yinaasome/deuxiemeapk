@@ -22,7 +22,7 @@ android.api = 31
 android.minapi = 21
 
 # ✅ Compatible NDK version
-android.ndk = 21e
+android.ndk = 25b
 
 # ❌ Supprimé les chemins forcés pour que Buildozer télécharge proprement
 # android.ndk_path = ~/.buildozer/android/platform/android-ndk-r25b
