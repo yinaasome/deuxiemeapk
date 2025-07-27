@@ -1,4 +1,4 @@
-name: Build Android APK (Optimized)
+name: Build Android APK (Robust Fix)
 
 on:
   push:
@@ -6,142 +6,94 @@ on:
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
-    inputs:
-      debug_mode:
-        description: 'Enable debug logging'
-        required: false
-        default: 'false'
-        type: boolean
 
 env:
   PYTHON_VERSION: '3.9'
   JAVA_VERSION: '11'
   ANDROID_API_LEVEL: '31'
   ANDROID_MIN_API: '21'
-  NDK_VERSION: '25b'
+  NDK_VERSION: '23.1.7779620'
+  BUILDOZER_VERSION: '1.4.0'
 
 jobs:
   build:
-    runs-on: ubuntu-22.04  # Updated to more recent LTS
-    timeout-minutes: 120   # Prevent hanging builds
+    runs-on: ubuntu-20.04  # Stick with 20.04 for better compatibility
+    timeout-minutes: 180   # Longer timeout for complex builds
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # Full history for proper versioning
+        fetch-depth: 1
+
+    - name: Free up disk space
+      run: |
+        # Remove unnecessary packages to free space
+        sudo apt-get remove -y '^dotnet-.*' '^llvm-.*' azure-cli google-chrome-stable firefox powershell mono-devel || true
+        sudo apt-get autoremove -y
+        sudo apt-get clean
+        df -h
 
     - name: Set up Python ${{ env.PYTHON_VERSION }}
       uses: actions/setup-python@v4
       with:
         python-version: ${{ env.PYTHON_VERSION }}
-        cache: 'pip'
 
     - name: Set up Java ${{ env.JAVA_VERSION }}
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v3
       with:
         distribution: 'temurin'
         java-version: ${{ env.JAVA_VERSION }}
 
-    - name: Get buildozer cache key
-      id: buildozer-cache-key
-      run: |
-        echo "key=buildozer-${{ hashFiles('buildozer.spec', 'requirements.txt', 'main.py') }}-v3" >> $GITHUB_OUTPUT
-
-    - name: Cache buildozer global directory
-      uses: actions/cache@v4
+    - name: Cache buildozer directories
+      uses: actions/cache@v3
       with:
-        path: .buildozer_global
-        key: ${{ steps.buildozer-cache-key.outputs.key }}-global
+        path: |
+          .buildozer_global
+          .buildozer
+        key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}-v4
         restore-keys: |
-          buildozer-${{ hashFiles('buildozer.spec') }}-v3-global
-          buildozer-v3-global
-
-    - name: Cache buildozer directory
-      uses: actions/cache@v4
-      with:
-        path: .buildozer
-        key: ${{ steps.buildozer-cache-key.outputs.key }}
-        restore-keys: |
-          buildozer-${{ hashFiles('buildozer.spec') }}-v3
-          buildozer-v3
-
-    - name: Cache pip dependencies
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/pip
-        key: pip-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('requirements.txt') }}
+          buildozer-${{ runner.os }}-v4
 
     - name: Install system dependencies
       run: |
         sudo apt-get update -qq
         sudo apt-get install -y --no-install-recommends \
-          build-essential git python3-dev python3-pip \
+          build-essential git python3-dev python3-pip python3-setuptools python3-wheel \
           openjdk-${{ env.JAVA_VERSION }}-jdk \
           autoconf automake libtool pkg-config \
-          zlib1g-dev libncurses5-dev libncursesw5-dev \
+          zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 \
           cmake libffi-dev libssl-dev \
           libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
           libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+          gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+          libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
+          libavdevice-dev libavfilter-dev libswresample-dev libavutil-dev \
+          libpng-dev libjpeg-dev libtiff5-dev libwebp-dev \
           ant ccache unzip wget curl
 
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip setuptools wheel
-        pip install buildozer==1.5.0 cython==0.29.33
-        if [ -f requirements.txt ]; then
-          pip install -r requirements.txt
-        fi
+        pip install buildozer==${{ env.BUILDOZER_VERSION }}
+        pip install cython==0.29.33
+        pip install colorama appdirs sh jinja2 six
 
-    - name: Set up Android environment
+    - name: Create requirements.txt if missing
       run: |
-        # Create Android directories
-        mkdir -p $HOME/.buildozer/android/platform
-        cd $HOME/.buildozer/android/platform
-        
-        # Set environment variables
-        export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
-        export ANDROID_SDK_ROOT=$ANDROID_HOME
-        export ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-r${{ env.NDK_VERSION }}
-        
-        # Save to GitHub environment
-        echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-        echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
-        echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
-        echo "ANDROIDSDK=$ANDROID_HOME" >> $GITHUB_ENV
-        echo "ANDROIDNDK=$ANDROID_NDK_HOME" >> $GITHUB_ENV
-        echo "ANDROIDAPI=${{ env.ANDROID_API_LEVEL }}" >> $GITHUB_ENV
-        echo "ANDROIDMINAPI=${{ env.ANDROID_MIN_API }}" >> $GITHUB_ENV
-
-    - name: Install Android SDK
-      run: |
-        cd $HOME/.buildozer/android/platform
-        
-        # Download and setup Command Line Tools
-        if [ ! -d "android-sdk" ]; then
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-          unzip -q commandlinetools-linux-9477386_latest.zip
-          mkdir -p android-sdk/cmdline-tools
-          mv cmdline-tools android-sdk/cmdline-tools/latest
-          rm commandlinetools-linux-9477386_latest.zip
+        if [ ! -f requirements.txt ]; then
+          echo "Creating basic requirements.txt..."
+          cat > requirements.txt << 'EOF'
+        kivy==2.1.0
+        python-for-android
+        pyjnius
+        plyer
+        EOF
         fi
-        
-        # Download NDK if not cached
-        if [ ! -d "android-ndk-r${{ env.NDK_VERSION }}" ]; then
-          wget -q https://dl.google.com/android/repository/android-ndk-r${{ env.NDK_VERSION }}-linux.zip
-          unzip -q android-ndk-r${{ env.NDK_VERSION }}-linux.zip
-          rm android-ndk-r${{ env.NDK_VERSION }}-linux.zip
-        fi
-        
-        # Setup SDK tools
-        export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
-        
-        # Accept licenses and install components
-        yes | sdkmanager --licenses > /dev/null 2>&1 || true
-        sdkmanager --update
-        sdkmanager "platform-tools" "platforms;android-${{ env.ANDROID_API_LEVEL }}" "build-tools;31.0.0"
+        echo "Requirements.txt content:"
+        cat requirements.txt
 
-    - name: Validate app structure
+    - name: Create main.py if missing
       run: |
         if [ ! -f main.py ]; then
           if [ -f apk3.py ]; then
@@ -150,129 +102,282 @@ jobs:
           else
             echo "Creating minimal Kivy app..."
             cat > main.py << 'EOF'
-        #!/usr/bin/env python3
         from kivy.app import App
         from kivy.uix.boxlayout import BoxLayout
         from kivy.uix.label import Label
         from kivy.uix.button import Button
 
-        class MainApp(App):
+        class MobileMoneyApp(App):
             def build(self):
-                layout = BoxLayout(orientation='vertical', padding=20, spacing=20)
+                layout = BoxLayout(orientation='vertical', padding=40, spacing=20)
                 
+                # Title
                 title = Label(
-                    text='Mobile Money App',
+                    text='Mobile Money\nApplication',
                     size_hint_y=None,
-                    height=100,
-                    font_size=24
+                    height=200,
+                    font_size='24sp',
+                    halign='center',
+                    valign='middle'
                 )
+                title.bind(size=title.setter('text_size'))
                 
+                # Welcome message
+                welcome = Label(
+                    text='Welcome to your Mobile Money app!\nTap the button below to continue.',
+                    size_hint_y=None,
+                    height=120,
+                    font_size='16sp',
+                    halign='center',
+                    valign='middle'
+                )
+                welcome.bind(size=welcome.setter('text_size'))
+                
+                # Action button
                 button = Button(
                     text='Get Started',
                     size_hint_y=None,
-                    height=60
+                    height=80,
+                    font_size='18sp'
                 )
+                button.bind(on_press=self.on_button_press)
                 
                 layout.add_widget(title)
+                layout.add_widget(welcome)
                 layout.add_widget(button)
                 
                 return layout
+            
+            def on_button_press(self, instance):
+                instance.text = 'Welcome to Mobile Money!'
 
         if __name__ == '__main__':
-            MainApp().run()
+            MobileMoneyApp().run()
         EOF
           fi
         fi
         
-        echo "App structure:"
-        ls -la
-        echo "Main.py content preview:"
+        echo "Main.py preview:"
         head -20 main.py
 
-    - name: Initialize buildozer config
+    - name: Initialize and configure buildozer
       run: |
         if [ ! -f buildozer.spec ]; then
-          echo "Initializing buildozer configuration..."
+          echo "Initializing buildozer..."
           buildozer init
-          
-          # Customize buildozer.spec for better APK
-          sed -i "s/title = My Application/title = Mobile Money/" buildozer.spec
-          sed -i "s/package.name = myapp/package.name = mobilemoney/" buildozer.spec
-          sed -i "s/package.domain = org.example/package.domain = com.mobilemoney/" buildozer.spec
-          sed -i "s/#android.api = 31/android.api = ${{ env.ANDROID_API_LEVEL }}/" buildozer.spec
-          sed -i "s/#android.minapi = 21/android.minapi = ${{ env.ANDROID_MIN_API }}/" buildozer.spec
-          sed -i "s/#android.ndk = 25b/android.ndk = ${{ env.NDK_VERSION }}/" buildozer.spec
         fi
+        
+        # Configure buildozer.spec with proper settings
+        cat > buildozer.spec << 'EOF'
+        [app]
+        title = Mobile Money
+        package.name = mobilemoney
+        package.domain = com.mobilemoney.app
+        source.dir = .
+        source.include_exts = py,png,jpg,kv,atlas,json,txt
+        version = 0.1
+        requirements = python3,kivy==2.1.0,pyjnius,plyer
+        
+        [buildozer]
+        log_level = 2
+        
+        [app]
+        presplash.filename = %(source.dir)s/data/presplash.png
+        icon.filename = %(source.dir)s/data/icon.png
+        
+        [android]
+        api = 31
+        minapi = 21
+        ndk = 23.1.7779620
+        sdk = 31
+        ndk_path = 
+        sdk_path = 
+        ant_path = /usr/bin/ant
+        
+        # Build configuration
+        debug = 1
+        
+        # Permissions
+        android.permissions = INTERNET,ACCESS_NETWORK_STATE,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
+        
+        # Android entry point
+        android.entrypoint = org.kivy.android.PythonActivity
+        android.apptheme = "@android:style/Theme.NoTitleBar"
+        
+        # Architectures
+        android.archs = arm64-v8a,armeabi-v7a
+        
+        # Gradle
+        android.gradle_dependencies = 
+        android.add_jars = 
+        
+        # Skip specific requirements
+        android.skip_update = False
+        android.accept_sdk_license = True
+        
+        [buildozer]
+        log_level = 2
+        warn_on_root = 1
+        EOF
+        
+        echo "Buildozer.spec configured:"
+        cat buildozer.spec
 
-    - name: Build Android APK
+    - name: Setup Android environment manually
       run: |
-        echo "Starting APK build process..."
+        export BUILDOZER_GLOBAL_DIR="$(pwd)/.buildozer_global"
+        mkdir -p $BUILDOZER_GLOBAL_DIR
         
-        # Enable debug logging if requested
-        if [ "${{ github.event.inputs.debug_mode }}" = "true" ]; then
-          VERBOSE_FLAG="--verbose"
-        else
-          VERBOSE_FLAG=""
-        fi
+        # Set Android environment variables
+        export ANDROID_HOME="$BUILDOZER_GLOBAL_DIR/android/android-sdk"
+        export ANDROID_SDK_ROOT="$ANDROID_HOME"
+        export ANDROID_NDK_HOME="$BUILDOZER_GLOBAL_DIR/android/android-ndk-r${{ env.NDK_VERSION }}"
+        export ANDROIDSDK="$ANDROID_HOME"
+        export ANDROIDNDK="$ANDROID_NDK_HOME"
+        export ANDROIDAPI="${{ env.ANDROID_API_LEVEL }}"
+        export ANDROIDMINAPI="${{ env.ANDROID_MIN_API }}"
         
-        # Build with error handling
-        if ! buildozer android debug $VERBOSE_FLAG; then
-          echo "❌ First build attempt failed. Cleaning and retrying..."
-          buildozer android clean
-          rm -rf .buildozer/android/platform/build-* || true
-          
-          # Second attempt with verbose logging
-          buildozer android debug --verbose
-        fi
+        # Add to GitHub environment
+        echo "BUILDOZER_GLOBAL_DIR=$BUILDOZER_GLOBAL_DIR" >> $GITHUB_ENV
+        echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+        echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+        echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
+        echo "ANDROIDSDK=$ANDROID_HOME" >> $GITHUB_ENV
+        echo "ANDROIDNDK=$ANDROID_NDK_HOME" >> $GITHUB_ENV
+        echo "ANDROIDAPI=${{ env.ANDROID_API_LEVEL }}" >> $GITHUB_ENV
+        echo "ANDROIDMINAPI=${{ env.ANDROID_MIN_API }}" >> $GITHUB_ENV
+        
+        echo "Android environment configured:"
+        echo "ANDROID_HOME: $ANDROID_HOME"
+        echo "ANDROID_NDK_HOME: $ANDROID_NDK_HOME"
 
-    - name: Verify and collect build artifacts
+    - name: Create default app icons and assets
       run: |
-        echo "🔍 Checking for APK files..."
+        # Create data directory for assets
+        mkdir -p data
         
-        # Find all APK files
-        APK_FILES=$(find . -name "*.apk" -type f 2>/dev/null || true)
-        
-        if [ -z "$APK_FILES" ]; then
-          echo "❌ No APK files found!"
-          echo "Directory structure:"
-          find . -type d -name "*build*" -o -name "*bin*" -o -name "*dist*" 2>/dev/null || true
-          exit 1
+        # Create a simple icon (PNG format) using convert if available
+        if command -v convert >/dev/null 2>&1; then
+          convert -size 512x512 xc:'#4CAF50' -fill white -gravity center -pointsize 72 -annotate +0+0 'MM' data/icon.png
+          convert -size 1024x1024 xc:'#4CAF50' -fill white -gravity center -pointsize 120 -annotate +0+0 'Mobile\nMoney' data/presplash.png
         else
-          echo "✅ Found APK files:"
-          echo "$APK_FILES" | while read apk; do
-            echo "  📱 $apk ($(du -h "$apk" | cut -f1))"
-          done
+          # Create placeholder files
+          echo "Creating placeholder icon files..."
+          touch data/icon.png
+          touch data/presplash.png
         fi
         
-        # Create bin directory if it doesn't exist
+        ls -la data/ || echo "No data directory assets"
+
+    - name: Pre-build validation
+      run: |
+        echo "=== Pre-build validation ==="
+        echo "Python version: $(python --version)"
+        echo "Java version: $(java -version 2>&1 | head -1)"
+        echo "Buildozer version: $(buildozer version)"
+        echo ""
+        echo "File structure:"
+        ls -la
+        echo ""
+        echo "Environment variables:"
+        env | grep -E "(ANDROID|JAVA|PYTHON)" | sort
+        echo ""
+        echo "Available disk space:"
+        df -h
+        echo ""
+
+    - name: Build Android APK with comprehensive error handling
+      id: build
+      run: |
+        echo "Starting Android APK build..."
+        
+        # Create bin directory
         mkdir -p bin
         
-        # Copy APKs to bin directory for consistent artifact upload
-        find . -name "*.apk" -type f -exec cp {} bin/ \;
+        # Set environment for build
+        export BUILDOZER_GLOBAL_DIR="$(pwd)/.buildozer_global"
+        export ANDROID_HOME="$BUILDOZER_GLOBAL_DIR/android/android-sdk"
+        export ANDROID_NDK_HOME="$BUILDOZER_GLOBAL_DIR/android/android-ndk-r${{ env.NDK_VERSION }}"
+        
+        # Function to attempt build
+        attempt_build() {
+          local attempt=$1
+          echo "=== Build Attempt $attempt ==="
+          
+          if buildozer android debug --verbose 2>&1 | tee build_log_attempt_$attempt.txt; then
+            echo "✅ Build attempt $attempt succeeded!"
+            return 0
+          else
+            echo "❌ Build attempt $attempt failed"
+            echo "Last 50 lines of build log:"
+            tail -n 50 build_log_attempt_$attempt.txt
+            return 1
+          fi
+        }
+        
+        # Try building up to 3 times
+        success=false
+        for attempt in 1 2 3; do
+          if attempt_build $attempt; then
+            success=true
+            break
+          else
+            if [ $attempt -lt 3 ]; then
+              echo "Cleaning for retry..."
+              buildozer android clean || true
+              rm -rf .buildozer/android/platform/build-* || true
+              sleep 10
+            fi
+          fi
+        done
+        
+        if [ "$success" = false ]; then
+          echo "❌ All build attempts failed"
+          exit 1
+        fi
+        
+        # Find and copy APK files
+        echo "=== Searching for APK files ==="
+        find . -name "*.apk" -type f 2>/dev/null | while read apk_file; do
+          echo "Found APK: $apk_file"
+          cp "$apk_file" bin/
+        done
+        
+        # Verify APK creation
+        if ls bin/*.apk 1> /dev/null 2>&1; then
+          echo "✅ APK files successfully created:"
+          ls -la bin/*.apk
+          echo "build_success=true" >> $GITHUB_OUTPUT
+        else
+          echo "❌ No APK files found in bin directory"
+          echo "Directory contents:"
+          find . -name "*.apk" -type f 2>/dev/null || echo "No APK files found anywhere"
+          echo "build_success=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
 
     - name: Upload APK artifacts
       uses: actions/upload-artifact@v4
-      if: always()
+      if: steps.build.outputs.build_success == 'true'
       with:
         name: mobile-money-apk-${{ github.run_number }}
         path: bin/*.apk
         retention-days: 30
-        if-no-files-found: error
 
-    - name: Upload build logs on failure
-      if: failure()
+    - name: Upload build logs
       uses: actions/upload-artifact@v4
+      if: always()
       with:
         name: build-logs-${{ github.run_number }}
         path: |
+          build_log_attempt_*.txt
           .buildozer/android/platform/build-*/build.log
           .buildozer/android/platform/python-for-android/dist/*/build.log
-          .buildozer/*.log
         retention-days: 7
         if-no-files-found: ignore
 
     - name: Create GitHub Release
-      if: startsWith(github.ref, 'refs/tags/') && success()
+      if: startsWith(github.ref, 'refs/tags/') && steps.build.outputs.build_success == 'true'
       uses: softprops/action-gh-release@v1
       with:
         files: bin/*.apk
@@ -280,29 +385,36 @@ jobs:
         body: |
           📱 **Mobile Money Application - Version ${{ github.ref_name }}**
           
-          ### 🚀 New in this release:
-          - Built with Android API ${{ env.ANDROID_API_LEVEL }}
-          - Minimum Android version: API ${{ env.ANDROID_MIN_API }}
-          - Optimized build process
+          ### 🚀 Features:
+          - Native Android application built with Kivy
+          - Supports Android API ${{ env.ANDROID_API_LEVEL }}+ (Android 12+)
+          - Minimum Android version: API ${{ env.ANDROID_MIN_API }} (Android 5.0+)
+          - Multi-architecture support (ARM64, ARMv7)
           
-          ### 📲 Installation Instructions:
-          1. Download the APK file below
+          ### 📲 Installation:
+          1. Download the APK file
           2. Enable "Install from Unknown Sources" in Android Settings
           3. Install the downloaded APK
           
-          ### 🔐 Default Login:
-          - **Administrator**: `admin` / `admin123`
+          ### 🔐 Default Credentials:
+          - **Admin**: `admin` / `admin123`
           
-          ### 📝 Build Information:
+          ### 📋 Build Information:
           - Build Date: ${{ github.event.head_commit.timestamp }}
-          - Commit: ${{ github.sha }}
-          - Built via GitHub Actions
+          - Commit SHA: ${{ github.sha }}
+          - Python Version: ${{ env.PYTHON_VERSION }}
+          - Buildozer Version: ${{ env.BUILDOZER_VERSION }}
+          
+          ### 🐛 Issues?
+          If you encounter any problems, please create an issue with:
+          - Your Android version
+          - Device model
+          - Error screenshots/logs
           
           ---
-          *For support or issues, please create an issue in this repository.*
+          *Built automatically with GitHub Actions*
         draft: false
-        prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
-        generate_release_notes: true
+        prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -312,16 +424,26 @@ jobs:
         echo "## 📊 Build Summary" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Build Success**: ${{ steps.build.outputs.build_success || 'false' }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Python Version**: ${{ env.PYTHON_VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Java Version**: ${{ env.JAVA_VERSION }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Android API**: ${{ env.ANDROID_API_LEVEL }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **NDK Version**: ${{ env.NDK_VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Buildozer Version**: ${{ env.BUILDOZER_VERSION }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Build Time**: $(date)" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         
-        if [ -d "bin" ] && [ "$(ls -A bin/*.apk 2>/dev/null)" ]; then
+        if [ "${{ steps.build.outputs.build_success }}" = "true" ] && [ -d "bin" ] && ls bin/*.apk 1> /dev/null 2>&1; then
           echo "### ✅ Generated APKs:" >> $GITHUB_STEP_SUMMARY
-          ls -la bin/*.apk | while read line; do
-            echo "- $line" >> $GITHUB_STEP_SUMMARY
-          done
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          ls -la bin/*.apk >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
         else
-          echo "### ❌ No APKs generated" >> $GITHUB_STEP_SUMMARY
+          echo "### ❌ Build Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Troubleshooting Tips:**" >> $GITHUB_STEP_SUMMARY
+          echo "1. Check build logs artifact for detailed error messages" >> $GITHUB_STEP_SUMMARY
+          echo "2. Ensure main.py and requirements.txt exist in repository root" >> $GITHUB_STEP_SUMMARY
+          echo "3. Verify buildozer.spec configuration is correct" >> $GITHUB_STEP_SUMMARY
+          echo "4. Check if Android SDK/NDK downloaded successfully" >> $GITHUB_STEP_SUMMARY
         fi
