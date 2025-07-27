@@ -128,15 +128,14 @@ jobs:
           rm commandlinetools-linux-9477386_latest.zip
         fi
         
-        # Download NDK if not cached
-        if [ ! -d "android-ndk-r${{ env.NDK_VERSION }}" ]; then
-          wget -q https://dl.google.com/android/repository/android-ndk-r${{ env.NDK_VERSION }}-linux.zip
-          unzip -q android-ndk-r${{ env.NDK_VERSION }}-linux.zip
-          rm android-ndk-r${{ env.NDK_VERSION }}-linux.zip
-        fi
-        
-        # Setup SDK tools
-        export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+        wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip
+        unzip -q android-ndk-r25b-linux.zip
+        mv android-ndk-r25b ~/.buildozer/android/platform/android-ndk-r25b
+
+        # Fix toolchain path Buildozer‑compatible
+        ln -sf $HOME/.buildozer/android/platform/android-ndk-r25b/toolchains/llvm/prebuilt/linux-x86_64 \
+        $HOME/.buildozer/android/platform/android-ndk-r25b/prebuilt/linux-x86_64
+
         
         # Accept licenses and install components
         yes | sdkmanager --licenses > /dev/null 2>&1 || true
