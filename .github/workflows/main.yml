@@ -143,6 +143,11 @@ jobs:
         sdkmanager --update
         sdkmanager "platform-tools" "platforms;android-${{ env.ANDROID_API_LEVEL }}" "build-tools;31.0.0"
 
+        # 🔧 Fix for Buildozer: link sdkmanager to expected path
+        mkdir -p $ANDROID_HOME/tools/bin
+        ln -sf $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager $ANDROID_HOME/tools/bin/sdkmanager
+
+
     - name: Validate app structure
       run: |
         if [ ! -f main.py ]; then
